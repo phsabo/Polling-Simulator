@@ -11,7 +11,7 @@ import datetime
 import csv
 
 NodesBegin=1
-NodesEnd=100
+NodesEnd=50
 passo=1
 
 InterMax=1500 #miliseconds
@@ -22,7 +22,7 @@ ProcessingTime*=1000 #paramilisegundos,micro
 ServerInterval = 6  #milisegundos
 SucessoTransmissao=100 #%
 DistribuicaoIntervalos="poisson"# linear, poisson, exponential, normal
-DisciplinaServico = "knowing" #FIFO, knowing, knowingstd, hibrid
+DisciplinaServico = "knowingstd" #FIFO, knowing, knowingstd, hibrid, random
 
 DeltaDelay=2*ServerInterval#milisegundos
 
@@ -47,6 +47,9 @@ PacketsSend=0
 listTPolls=[]
 TPolls=0
 
+lastPoll=0
+lastlastPoll=0
+
 np.random.seed(0)
     
 packets = np.zeros(Nodes)
@@ -59,6 +62,9 @@ aux=0
 def Polling(modo,now):
     global AuxNode
     global aux
+    global lastPoll
+    global lastlastPoll
+
     if(modo=="hibrid" and listKnowing.min()!=0):
         #média das diferenças
         dif=listKnowing[:, 1:]-listKnowing[:, :-1]
@@ -90,20 +96,31 @@ def Polling(modo,now):
         value=np.max(dp)
         l=np.mean(dif, axis=1).astype(int)
         #print(l)
-        if (value>(np.min(l))/10):
+        if (value>(np.min(l))/6):
             listKnowing[np.argmax(dp)][-1]=0
+            #desvio padrão reinicia tabela
             #print(dp)
             return -1
         nextTrans=l+listKnowing[:,-1]
         #print("next transmition "+str(nextTrans))
         l2=nextTrans-now+DeltaDelay#+np.random.randint(0,DeltaDelay*5,size=len(l))
         #print(l2)
-        value=np.min(np.absolute(l2))
+        value=np.min(l2)
+            
         #value=np.min(l2)
         #if(value<DeltaDelay and value>-(Nodes*DeltaDelay)):
-        if(value<2*DeltaDelay):
+        if(value<3*DeltaDelay):
+            if(lastPoll==np.argmin(l2) and len(l2)>1):
+                l3=l2
+                l3[np.argmin(l2)]=1000
+                value=np.min(l3)
+                if(value<3*DeltaDelay):
+                    return np.argmin(l3)
+                else:
+                    return -1
+            else:
             #print(np.argmin(l2))
-            return np.argmin(np.absolute(l2))
+                return np.argmin(l2)
         else:
             return -1
     elif(modo=="knowing" and listKnowing.min()!=0):
@@ -125,6 +142,8 @@ def Polling(modo,now):
         AuxNode+=1
         AuxNode%=Nodes
         return AuxNode
+    elif(modo=="random"):
+        return np.random.randint(0,Nodes)
     else:
         AuxNode+=1
         AuxNode%=Nodes
@@ -138,9 +157,13 @@ def server(now):
     global listKnowing
     global packets
     global TPolls
+    global lastPoll
+    global lastlastPoll
     if (now%ServerInterval==0 or AuxNode==-1):
         nodePoll=Polling(DisciplinaServico,now)
         if(nodePoll!=-1):
+            lastlastPoll=lastPoll
+            lastPoll=nodePoll
             TPolls+=1
             #print("poll para "+ str(nodePoll)+" "+str(now))
             if(packets[nodePoll]!=0):
@@ -283,11 +306,11 @@ def main(first, end, passo,InterMin, InterMed, InterMax):
     # Open File
     now = datetime.datetime.now()
     datastr= ('{:02d}'.format(now.year)+'{:02d}'.format(now.month)+'{:02d}'.format(now.day)+"-"+'{:02d}'.format(now.hour)+'{:02d}'.format(now.minute)+'{:02d}'.format(now.second))
-    resultFyle = open((datastr+".csv"),'w', newline='')
+    resultFile = open((datastr+".csv"),'w', newline='')
     
     # Create Writer Object
     #wr = csv.writer(resultFyle, dialect='excel',delimiter=';')
-    wr = csv.writer(resultFyle, dialect='excel',delimiter=';')
+    wr = csv.writer(resultFile, dialect='excel',delimiter=';')
     wr.writerow(["Disciplina",DisciplinaServico])
     wr.writerow(["Intervalos","Min","Med","Max"])
     wr.writerow([DistribuicaoIntervalos,InterMin,InterMed,InterMax])
@@ -315,7 +338,7 @@ def main(first, end, passo,InterMin, InterMed, InterMax):
         print(laux)
         wr.writerow(laux)    
         pass
-    resultFyle.close()
+    resultFile.close()
         
 if (__name__=="__main__"):
     main(NodesBegin, NodesEnd, passo, InterMin, InterMed, InterMax)    
