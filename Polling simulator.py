@@ -19,10 +19,20 @@ InterMed=1000
 InterMin=100#miliseconds
 ProcessingTime = 600 #segundos
 ProcessingTime*=1000 #paramilisegundos,micro
-ServerInterval = 6  #milisegundos
 SucessoTransmissao=100 #%
 DistribuicaoIntervalos="poisson"# linear, poisson, exponential, normal
-DisciplinaServico = "knowingstd" #FIFO, knowing, knowingstd, hibrid, random
+DisciplinaServico = "knowing" #FIFO, knowing, knowingstd, hibrid, random
+
+
+velocidadeTransmissao = 250000 #250kbps
+tamanhoPacote = 40 #bytes 1 preamble, 5 pipe, 32 payload, 2 CRC
+airTime=(8*(tamanhoPacote)+9)/velocidadeTransmissao
+timeUpload=(8*32)/400000
+totalTime=airTime*2+timeUpload*4
+time2=int(totalTime*1000)+1
+
+ServerInterval = time2  # +-6
+print("Serviço: ",ServerInterval)
 
 DeltaDelay=2*ServerInterval#milisegundos
 
@@ -50,7 +60,7 @@ TPolls=0
 lastPoll=0
 lastlastPoll=0
 
-np.random.seed(0)
+np.random.seed(1)
     
 packets = np.zeros(Nodes)
 
@@ -109,12 +119,12 @@ def Polling(modo,now):
             
         #value=np.min(l2)
         #if(value<DeltaDelay and value>-(Nodes*DeltaDelay)):
-        if(value<3*DeltaDelay):
+        if(value<4*DeltaDelay):
             if(lastPoll==np.argmin(l2) and len(l2)>1):
                 l3=l2
                 l3[np.argmin(l2)]=1000
                 value=np.min(l3)
-                if(value<3*DeltaDelay):
+                if(value<5*DeltaDelay):
                     return np.argmin(l3)
                 else:
                     return -1
