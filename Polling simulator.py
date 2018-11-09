@@ -25,11 +25,12 @@ DisciplinaServico = "knowing" #FIFO, knowing, knowingstd, hibrid, random
 
 
 velocidadeTransmissao = 250000 #250kbps
-tamanhoPacote = 40 #bytes 1 preamble, 5 pipe, 32 payload, 2 CRC
-airTime=(8*(tamanhoPacote)+9)/velocidadeTransmissao
-timeUpload=(8*32)/400000
-totalTime=airTime*2+timeUpload*4
-time2=int(totalTime*1000)+1
+tamanhoPacote = 32 #bytes 1 preamble, 5 pipe, 32 payload, 2 CRC
+airTime=(8*(1+5+tamanhoPacote+2)+9)/velocidadeTransmissao
+timeUploadArduino=(8*tamanhoPacote)/400000
+timeUploadRPi=(8*tamanhoPacote)/400000
+totalTime=airTime*2+timeUploadArduino*2+timeUploadRPi*2
+time2=int(totalTime*1000)+1#Para milisegundos
 
 ServerInterval = time2  # +-6
 print("Serviço: ",ServerInterval)
