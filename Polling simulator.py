@@ -23,12 +23,12 @@ SucessoTransmissao=100 #%
 DistribuicaoIntervalos="poisson"# linear, poisson, exponential, normal
 DisciplinaServico = "knowing" #FIFO, knowing, knowingstd, hibrid, random
 
-
 velocidadeTransmissao = 250000 #250kbps
 tamanhoPacote = 32 #bytes 1 preamble, 5 pipe, 32 payload, 2 CRC
+velocidadeSPI=400000
 airTime=(8*(1+5+tamanhoPacote+2)+9)/velocidadeTransmissao
-timeUploadArduino=(8*tamanhoPacote)/400000
-timeUploadRPi=(8*tamanhoPacote)/400000
+timeUploadArduino=(8*tamanhoPacote)/velocidadeSPI 
+timeUploadRPi=(8*tamanhoPacote)/velocidadeSPI
 totalTime=airTime*2+timeUploadArduino*2+timeUploadRPi*2
 time2=int(totalTime*1000)+1#Para milisegundos
 
