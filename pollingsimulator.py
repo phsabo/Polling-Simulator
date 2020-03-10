@@ -1,5 +1,4 @@
-#!/usr/bin/env python
-# -*- coding: latin-1 -*-
+# -*- coding: utf-8 -*-
 """
 Created on Wed Oct  3 16:19:40 2018
 
@@ -12,51 +11,50 @@ import matplotlib.pyplot as plt
 import time
 import csv
 import argparse
-import sys
-
-#reload(sys)
-#sys.setdefaultencoding('utf8')
-#sys.stdout = open(sys.stdout.fileno(), mode='w', encoding='utf8', buffering=1)
 
 print('\033[1m'+"Polling Simulator")
 print("***use -h, --help")
 
 #numero inicial, final de Nós
-NodesBegin=1
-NodesEnd=200
-passo=1
+NodesBegin=300
+NodesEnd=601
+passo=25
 
 #Intevalos de transmissão de cada nó e qual o tipo de distribuição
-#InterMed utilizados nas distribuições poisson, exponential, normal e fixed
-InterMed=1000    #miliseconds
+#InterMed utilizados nas distribuições poisson, exponential, normal e fixed 1/lambda
+InterMed=2000    #miliseconds
 #InterMax e InterMin utilizados somente quando a distribuição é linear
 InterMax=100   #miliseconds
 InterMin=100    #miliseconds
 DistribuicaoIntervalos="poisson"# linear, poisson, exponential, normal, fixed
 
 #tempo de Processamento para cada conjunto de nós
-ProcessingTime = 10.0 #minutos
+ProcessingTime = 300.0 #minutos
 
 #Taxa de sucesso na transmissão dos pacotes
-SucessoTransmissao=0.99 # distribuição normal
+SucessoTransmissao=0.90 # distribuição normal
 
 #Tipo de disciplina utilizada na passagem dos polls 
-RegraAtendimento = "Ciclico" #Ciclico, predict, predictstd, random
+RegraAtendimento = "predictstd" #Ciclico, predict, predictstd, random
 
 #valor máximo de desvio padrão para atualização da tabela  quando utilizado RegraAtendimento = "predictstd"
-CorrecaoSTD="250*np.log2(listMediaIntervalos/1000)+200"
+#CorrecaoSTD="250*np.log2(listMediaIntervalos/1000)+200"
+CorrecaoSTD="(listMediaIntervalos/InterMed)*800"
+maxSTD=1600
+minSTD=100
+#CorrecaoSTD="min(250*np.log2(listMediaIntervalos/1000)+200, (listMediaIntervalos/InterMed)*1600)"
 
 #parâmetros da rede e dos nós
-velocidadeTransmissao = 250000     #250000= 250kbps
+#velocidadeTransmissao = 250000     #250000= 250kbps
 #velocidadeTransmissao = 1000000    #1000000= 1Mbps
-#velocidadeTransmissao = 2000000     #2000000= 2Mbps
+velocidadeTransmissao = 2000000     #2000000= 2Mbps
 tamanhoPacote = 32 #bytes 1 preamble, 5 pipe, 32 payload, 2 CRC
 tamanhoControl = 3 #bytes 1 preamble, 5 pipe, 32 payload, 2 CRC
 overhead = 9#
 StartFromStandBy = 0.000130 #130us tempo modulo mudar rx->tx ou tx->rx
 velocidadeSPI=400000
 timeError=0.7 # % coeficiente de erro no calculo dos tempo s de acesso 
-timeProcessNewPoll=0.3#ms
+
 
 
 ap = argparse.ArgumentParser()
@@ -175,14 +173,10 @@ print("time Access Queue: ",TimeAccessQueue)
 TimeService=TimeAccessQueueandServer-TimeAccessQueue
 ServerInterval = TimeAccessQueueandServer  
 print("time Serviço: ",TimeService)
-
-
-
-#############################################################################
+print("STD", CorrecaoSTD)
 DeltaDelay=2*ServerInterval #intervalo de antecipação do envio dos polls
-#############################################################################
-
-
+if ((ProcessingTime/60000)<(InterMed/120)):
+    print("ATENÇÂO tempo de processamento mínimo sugerido = ", int(InterMed/120), " minutos por grupo")
 
 #variaveis globais
 Nodes=1
@@ -214,7 +208,7 @@ TPolls=0
 
 lastPoll=0
 
-np.random.seed(0)
+#np.random.seed(59)
  
 #variáveis da predição   
 listIntervalos=0  #intervalos entre transmissões
@@ -252,8 +246,8 @@ printHour(nowinit, "\n")
 aux=0
 
 
-print("Nodes begin\t\t", NodesBegin)
-print("Nodes end\t\t", NodesEnd)
+print("Group Ndes begn\t\t", NodesBegin)
+print("Group Ndes end\t\t", NodesEnd)
 print("Nodes step\t\t", passo)
 print("Nodes intervalo\t\t", InterMed , "mseg")
 print("time simulation\t\t", ProcessingTime/60000, "minutos por grupo" )
@@ -275,10 +269,15 @@ def attPredict():
     #CorrecaoSTD="250*np.log2(listMediaIntervalos/1000)+200"
     #lstdvalues= 250*np.log2(listMediaIntervalos/1000)+200 #CorrecaoSTD
     lstdvalues= eval(CorrecaoSTD) #CorrecaoSTD
+    #print(lstdvalues)
     
-    for i in range(len(lstdvalues)):
-        if lstdvalues[i]<100:
-            lstdvalues[i]=100
+    lstdvalues[lstdvalues>maxSTD]=maxSTD
+    lstdvalues[lstdvalues<minSTD]=minSTD
+    
+    #print(lstdvalues)
+    #for i in range(len(lstdvalues)):
+    #    if lstdvalues[i]<100:
+    #        lstdvalues[i]=100
     if (np.min(lstdvalues-listSTDnodes)<0):
         listTimes[np.argmin(lstdvalues-listSTDnodes)][-1]=0 #correção std
     
@@ -297,10 +296,9 @@ def Polling(modo,now):
         nextTrans=listMediaIntervalos+listTimes[:,-1]
         countdown=nextTrans-now
         value=np.min(countdown)
-        coef=max(1,len(listMediaIntervalos)/5)
-        if(value<DeltaDelay*coef):
+        if(value<2*DeltaDelay):
             for i in range(len(countdown)):
-                if (countdown[i]<DeltaDelay*coef):
+                if (countdown[i]<2*DeltaDelay):
                     listNodestoSend[i]=1
                 else:
                     listNodestoSend[i]=0
@@ -314,9 +312,9 @@ def Polling(modo,now):
         countdown=nextTrans-now
         #print(countdown)
         value=np.min(countdown)
-        if(value<DeltaDelay):
+        if(value<2*DeltaDelay):
             for i in range(len(countdown)):
-                if (countdown[i]<DeltaDelay):
+                if (countdown[i]<2*DeltaDelay):
                     listNodestoSend[i]=1
                 else:
                     listNodestoSend[i]=0
@@ -362,9 +360,8 @@ def server(now):
                 listTimes[nodePoll][qtdeAmostras-1]=now
                 PacketsSend+=1
                 packets[nodePoll]=0
-                if (RegraAtendimento!="Ciclico"):
-                    if (listTimes.min()!=0):
-                        attPredict() #atualiza a predição
+                if (listTimes.min()!=0):
+                    attPredict() #atualiza a predição
             else:
                 timeNow+=(TimeAccessQueue + TimeService)
                 
@@ -374,7 +371,7 @@ def server(now):
             timeNow+=TimeAccessQueue
                 
     else:
-        timeNow+=timeProcessNewPoll#tempo process new poll
+        timeNow+=1#tempo process new poll
 
 #produz os pacotes 
 def customer(now):
