@@ -16,44 +16,52 @@ print('\033[1m'+"Polling Simulator")
 print("***use -h, --help")
 
 #numero inicial, final de Nós
-NodesBegin=300
-NodesEnd=601
-passo=25
+NodesBegin=1  
+NodesEnd=1001
+passo=50
+
+
 
 #Intevalos de transmissão de cada nó e qual o tipo de distribuição
 #InterMed utilizados nas distribuições poisson, exponential, normal e fixed 1/lambda
-InterMed=2000    #miliseconds
-#InterMax e InterMin utilizados somente quando a distribuição é linear
-InterMax=100   #miliseconds
-InterMin=100    #miliseconds
-DistribuicaoIntervalos="poisson"# linear, poisson, exponential, normal, fixed
+InterMed=1000    #miliseconds
+
+#InterMax e InterMin utilizados somente quando a distribuição é uniforme
+InterMin=32000    #miliseconds
+
+InterMax=256000   #miliseconds
+DistribuicaoIntervalos="uniforme2"# uniforme, poisson, exponential, normal, fixed, aleatoria
+
+tipomudanca = -1# aleatório ou numero intevalo das mudanças em milisegundos inserir valor menor que 0 para não haver mudanças
+qtdemudanca = 0.1 #porcentagem dos nós que irão alterar o seu intervao
 
 #tempo de Processamento para cada conjunto de nós
-ProcessingTime = 300.0 #minutos
+ProcessingTime = 1000.0 #minutos
+Probabilidade_de_erro=0#10**-3
 
 #Taxa de sucesso na transmissão dos pacotes
-SucessoTransmissao=0.90 # distribuição normal
+SucessoTransmissao=1-Probabilidade_de_erro # Probabilidade de sucesso
 
 #Tipo de disciplina utilizada na passagem dos polls 
 RegraAtendimento = "predictstd" #Ciclico, predict, predictstd, random
 
 #valor máximo de desvio padrão para atualização da tabela  quando utilizado RegraAtendimento = "predictstd"
-#CorrecaoSTD="250*np.log2(listMediaIntervalos/1000)+200"
-CorrecaoSTD="(listMediaIntervalos/InterMed)*800"
+CorrecaoSTD="250*np.log2(listMediaIntervalos/1000)+200"
+#CorrecaoSTD="(listMediaIntervalos/InterMed)*1400"
 maxSTD=1600
 minSTD=100
 #CorrecaoSTD="min(250*np.log2(listMediaIntervalos/1000)+200, (listMediaIntervalos/InterMed)*1600)"
 
 #parâmetros da rede e dos nós
-#velocidadeTransmissao = 250000     #250000= 250kbps
+velocidadeTransmissao = 250000     #250000= 250kbps
 #velocidadeTransmissao = 1000000    #1000000= 1Mbps
-velocidadeTransmissao = 2000000     #2000000= 2Mbps
+#velocidadeTransmissao = 2000000     #2000000= 2Mbps
 tamanhoPacote = 32 #bytes 1 preamble, 5 pipe, 32 payload, 2 CRC
 tamanhoControl = 3 #bytes 1 preamble, 5 pipe, 32 payload, 2 CRC
 overhead = 9#
 StartFromStandBy = 0.000130 #130us tempo modulo mudar rx->tx ou tx->rx
-velocidadeSPI=400000
-timeError=0.7 # % coeficiente de erro no calculo dos tempo s de acesso 
+velocidadeSPI=400000 #400kbps
+timeprocessing=0.7 # % coeficiente de tempo de processamento no calculo dos tempo s de acesso 
 
 
 
@@ -66,9 +74,9 @@ ap.add_argument("-t", "--time", required=False, help="tempo de simulação para 
 ap.add_argument("-r", "--rule", required=False, help="regra de atendimento (Ciclico, predict, predictstd, random)")
 ap.add_argument("-v", "--velocidade", required=False, help="Datarate nominal (250000, 1000000, 2000000)")
 
-ap.add_argument("-d", "--Distribuicao", required=False, help="linear, poisson, exponential, normal, fixed")
-ap.add_argument("-imax", "--InterMax", required=False, help="InterMax e InterMin utilizados somente quando a distribuição é linear")
-ap.add_argument("-imin", "--InterMin", required=False, help="InterMax e InterMin utilizados somente quando a distribuição é linear")
+ap.add_argument("-d", "--Distribuicao", required=False, help="uniforme, poisson, exponential, normal, fixed")
+ap.add_argument("-imax", "--InterMax", required=False, help="InterMax e InterMin utilizados somente quando a distribuição é uniforme")
+ap.add_argument("-imin", "--InterMin", required=False, help="InterMax e InterMin utilizados somente quando a distribuição é uniforme")
 
 ap.add_argument("-S", "--sucesso", required=False, help="Taxa de sucesso na transmissão dos pacotes de 0-1 (padrão 0.9)")
 
@@ -77,7 +85,7 @@ ap.add_argument("-c", "--control", required=False, help="tamanho do payload do p
 ap.add_argument("-o", "--overhead", required=False, help="tamanho do overhead por pacote (padrão 9)")
 ap.add_argument("-ssb", "--startfromstandby", required=False, help="tempo para o modulo de rádio entrar nos modos RX ou TX (0.000130)")
 ap.add_argument("-spi", "--SPIdatarate", required=False, help="velocidade de comunicação entre o microcontrolador e o módulo de rádio em  bps (padrão 400000)")
-ap.add_argument("-E", "--timeError", required=False, help="coeficiente de erro nos tempos de comunicação (padrão 0.7)")
+ap.add_argument("-E", "--timeprocessing", required=False, help="coeficiente de tempo de processamento nos tempos de comunicação (padrão 0.7)")
 
 args = vars(ap.parse_args())
 #print (args)
@@ -118,8 +126,8 @@ if(args["startfromstandby"]!=None):
     StartFromStandBy=float(args["startfromstandby"])
 if(args["SPIdatarate"]!=None):
     velocidadeSPI=int(args["SPIdatarate"])
-if(args["timeError"]!=None):
-    timeError=float(args["timeError"])
+if(args["timeprocessing"]!=None):
+    timeprocessing=float(args["timeprocessing"])
 
 
 
@@ -165,15 +173,17 @@ totalTimeWaitingPoll=StartFromStandBy+timeUploadServerControl+airTimeControl+tim
                                                             #Server recebe pelo menos 1 byte     + timeUploadServerControl
                                                             #TotalTime em segundos      = totalTime
 #print(totalTime)
-TimeAccessQueueandServer=(totalTime*1000)*(1+timeError)
+tempoOcioso=(airTimeControl+timeUploadNodesControl)*1000*(1+timeprocessing)
+TimeAccessQueueandServer=(totalTime*1000)*(1+timeprocessing)
 #print("Access queue + Serviço: ",TimeAccessQueueandServer)
 #print(totalTimeWaitingPoll)
-TimeAccessQueue=(totalTimeWaitingPoll*1000)*(1+timeError)
+TimeAccessQueue=(totalTimeWaitingPoll*1000)*(1+timeprocessing)
+print("Tempo ocioso aguardando poll: ",tempoOcioso)
 print("time Access Queue: ",TimeAccessQueue)
 TimeService=TimeAccessQueueandServer-TimeAccessQueue
 ServerInterval = TimeAccessQueueandServer  
-print("time Serviço: ",TimeService)
-print("STD", CorrecaoSTD)
+print("time Service: ",TimeService)
+print("limiar STD", CorrecaoSTD)
 DeltaDelay=2*ServerInterval #intervalo de antecipação do envio dos polls
 if ((ProcessingTime/60000)<(InterMed/120)):
     print("ATENÇÂO tempo de processamento mínimo sugerido = ", int(InterMed/120), " minutos por grupo")
@@ -257,7 +267,7 @@ print("AirDataRate\t\t", velocidadeTransmissao/1000, "kbps" )
 
 
 #Atualiza a predição após cada pacote recebido
-def attPredict():
+def attPredict(modo):
     global listIntervalos
     global listSTDnodes
     global listMediaIntervalos
@@ -268,18 +278,14 @@ def attPredict():
     listMediaIntervalos=np.mean(listIntervalos, axis=1).astype(int)
     #CorrecaoSTD="250*np.log2(listMediaIntervalos/1000)+200"
     #lstdvalues= 250*np.log2(listMediaIntervalos/1000)+200 #CorrecaoSTD
-    lstdvalues= eval(CorrecaoSTD) #CorrecaoSTD
-    #print(lstdvalues)
-    
-    lstdvalues[lstdvalues>maxSTD]=maxSTD
-    lstdvalues[lstdvalues<minSTD]=minSTD
-    
-    #print(lstdvalues)
-    #for i in range(len(lstdvalues)):
-    #    if lstdvalues[i]<100:
-    #        lstdvalues[i]=100
-    if (np.min(lstdvalues-listSTDnodes)<0):
-        listTimes[np.argmin(lstdvalues-listSTDnodes)][-1]=0 #correção std
+    if(modo=="predictstd"):
+        lstdvalues= eval(CorrecaoSTD) #CorrecaoSTD
+        
+        lstdvalues[lstdvalues>maxSTD]=maxSTD
+        lstdvalues[lstdvalues<minSTD]=minSTD
+        
+        if (np.min(lstdvalues-listSTDnodes)<0):
+            listTimes[np.argmin(lstdvalues-listSTDnodes)][-1]=0 #correção std
     
 
 def Polling(modo,now):
@@ -334,6 +340,26 @@ def Polling(modo,now):
         AuxPoll+=1
         AuxPoll%=Nodes
         return AuxPoll
+
+def mudaintervalos(Intervalos, now):
+    global Nodes
+    global tipomudanca
+    global qtdemudanca
+    
+    if (tipomudanca=="aleatorio"):
+        if(np.random.randint(0,100) < 5):
+            print("mudou")
+            qtde=int(Nodes*qtdemudanca)
+            for i in range(qtde):
+                Intervalos[i]+=np.random.randint(int(-InterMed/2),int(InterMed/2)) 
+    elif (tipomudanca>0):
+        if (now >0 and now%tipomudanca<1):
+            print("mudou")
+            qtde=int(Nodes*qtdemudanca)
+            for i in range(qtde):
+                Intervalos[i]+=np.random.randint(int(-InterMed/2),int(InterMed/2)) 
+
+    return Intervalos
         
 #consome os pacotes    
 def server(now):
@@ -353,18 +379,19 @@ def server(now):
         TPolls+=1
         #print("poll para "+ str(nodePoll)+" "+str(now))
         if(packets[nodePoll]!=0):
-            if(np.absolute(np.random.normal(0, 0.25))<SucessoTransmissao):
+            if(np.absolute(np.random.random())<SucessoTransmissao):
                 timeNow+=(TimeAccessQueue + TimeService)
+                #print("a")
                 listDelay.append(now-packets[nodePoll])
                 listTimes[nodePoll]=np.roll(listTimes[nodePoll],-1)
                 listTimes[nodePoll][qtdeAmostras-1]=now
                 PacketsSend+=1
                 packets[nodePoll]=0
                 if (listTimes.min()!=0):
-                    attPredict() #atualiza a predição
+                    attPredict(RegraAtendimento) #atualiza a predição
             else:
                 timeNow+=(TimeAccessQueue + TimeService)
-                
+                #print("b")
         else:
             global lostPolls
             lostPolls+=1
@@ -372,6 +399,16 @@ def server(now):
                 
     else:
         timeNow+=1#tempo process new poll
+def distrUniforme(Mi, Ma, N):
+    distr=[]
+    if (N!=1):        
+        passo=int((Ma-Mi)/(N-1))
+    else:
+        passo=int((Ma-Mi)/(N))
+    for i in range (N):
+        distr.append(Mi+(passo*i))
+    return distr
+
 
 #produz os pacotes 
 def customer(now):
@@ -379,6 +416,8 @@ def customer(now):
     global lostMsgs
     global packets
     global IntervalosAcumul
+    global Intervalos
+    
     listNow=(IntervalosAcumul*(-1))+now
     Htime=np.max(listNow)
     if (Htime>=0):
@@ -393,6 +432,7 @@ def customer(now):
                 IntervalosAcumul[i]+=Intervalos[i]
                 PacketsProduced+=1
                 #print(packets)
+    mudaintervalos(Intervalos, now)
 
 def main(first, end, passo,InterMin, InterMed, InterMax):
     
@@ -437,21 +477,35 @@ def main(first, end, passo,InterMin, InterMed, InterMax):
         listTimes.resize(Nodes,qtdeAmostras)
         listNodestoSend.resize(Nodes,1)
         
-        if (DistribuicaoIntervalos=="linear"):
-            Intervalos = np.random.randint(InterMin, InterMax, size=Nodes)
+        if (DistribuicaoIntervalos=="uniforme"):
+            Intervalos = np.random.uniform(InterMin, InterMax+1, size=Nodes)
+            #print(np.mean(Intervalos))
+            #print(np.amin(Intervalos))
+            #print(np.amax(Intervalos))
+            #IntervalosAcumul=Intervalos.copy()
+        elif (DistribuicaoIntervalos=="uniforme2"):
+            Intervalos = np.array(distrUniforme(InterMin, InterMax, Nodes))
+            #print((Intervalos))
+            #print(np.amin(Intervalos))
+            #print(np.amax(Intervalos))
+            #IntervalosAcumul=Intervalos.copy()
+        elif(DistribuicaoIntervalos=="aleatoria"):
+            Intervalos = np.random.randint(InterMin, InterMax+1, size=Nodes)
+            #IntervalosAcumul=Intervalos.copy()
         elif(DistribuicaoIntervalos=="poisson"):
             Intervalos=np.random.poisson(InterMed, Nodes).astype(int)
-            IntervalosAcumul=Intervalos.copy()
+            #IntervalosAcumul=Intervalos.copy()
         elif(DistribuicaoIntervalos=="exponential"):
             Intervalos=np.random.exponential(InterMed, Nodes).astype(int)
-            IntervalosAcumul=Intervalos.copy()
+            #IntervalosAcumul=Intervalos.copy()
         elif(DistribuicaoIntervalos=="normal"):
             Intervalos=np.random.normal(InterMed, InterMed/3, Nodes).astype(int)
-            IntervalosAcumul=Intervalos.copy()
+            #IntervalosAcumul=Intervalos.copy()
         elif(DistribuicaoIntervalos=="fixed"):
             Intervalos=(np.zeros(Nodes).astype(int)+InterMed)
-            IntervalosAcumul=Intervalos.copy()
-        IntervalosAcumul+=(np.arange(0,Nodes)*10)
+            #IntervalosAcumul=Intervalos.copy()
+        IntervalosAcumul+=(np.random.randint(0,InterMax,Nodes))
+        #IntervalosAcumul+=(np.arange(0,Nodes)*10)
         packets = np.zeros(Nodes)
         
         ##printar intervalos
@@ -463,6 +517,7 @@ def main(first, end, passo,InterMin, InterMed, InterMax):
         while timeNow <= ProcessingTime:
             customer(timeNow)
             server(timeNow)
+#            precision
 
         listMeanDelay.append(np.mean(listDelay))
         print("mean Delay: %.3f ms" % ((np.mean(listDelay))), end="\t\t")
@@ -550,7 +605,7 @@ def main(first, end, passo,InterMin, InterMed, InterMax):
     wr.writerow(["Largura de banda bps",velocidadeTransmissao, "tempo serviço (s)", str(TimeService/1000).replace('.',','), "tempo fila", str(TimeAccessQueue/1000).replace('.',',') ])
     wr.writerow(["Intervalos (s)","Min","Med","Max"])
     wr.writerow([DistribuicaoIntervalos,InterMin,InterMed,InterMax])
-    wr.writerow(["Tempo para cada amostra (s)",str(ProcessingTime/1000).replace('.',',')])
+    wr.writerow(["Tempo para cada amostra (s)",str(ProcessingTime/1000).replace('.',','),"","Probabilidade de erro",Probabilidade_de_erro])
     laux=["nodes","delay (ms)","% lost msgs","success polls","failed polls","total polls","Packets Produced","Packets Send","Tpolls"]
     
     print(laux)
